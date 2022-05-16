@@ -2,6 +2,7 @@ import { App, Stack } from 'aws-cdk-lib';
 import { Vpc } from 'aws-cdk-lib/aws-ec2';
 import {
     addCluster,
+    addService,
     addTaskDefinitionWithContainer,
     ContainerConfig,
     TaskConfig
@@ -20,9 +21,10 @@ const vpc = Vpc.fromLookup(stack, 'vpc', {
 });
 
 const id = 'my-test-cluster';
-addCluster(stack, id, vpc);
+const cluster = addCluster(stack, id, vpc);
 
 const taskConfig: TaskConfig = { cpu: 512, memoryLimitMB: 1024, family: 'webserver' };
 const containerConfig: ContainerConfig = { dockerHubImage: 'httpd' };
 
-addTaskDefinitionWithContainer(stack, `taskdef-${taskConfig.family}`, taskConfig, containerConfig);
+const taskdef = addTaskDefinitionWithContainer(stack, `taskdef-${taskConfig.family}`, taskConfig, containerConfig);
+addService(stack, `service-${taskConfig.family}`, cluster, taskdef, 80, 0);

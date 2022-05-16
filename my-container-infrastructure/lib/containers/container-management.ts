@@ -1,5 +1,11 @@
-import { IVpc } from 'aws-cdk-lib/aws-ec2';
-import { Cluster, ContainerImage, FargateTaskDefinition, TaskDefinition } from 'aws-cdk-lib/aws-ecs';
+import { IVpc, Peer, Port, SecurityGroup } from 'aws-cdk-lib/aws-ec2';
+import {
+    Cluster,
+    ContainerImage,
+    FargateService,
+    FargateTaskDefinition,
+    TaskDefinition
+} from 'aws-cdk-lib/aws-ecs';
 import { Construct } from 'constructs';
 
 export const addCluster = function(scope: Construct, id: string, vpc: IVpc): Cluster {
@@ -30,4 +36,32 @@ const taskdef = new FargateTaskDefinition(scope, id, {
     taskdef.addContainer(`container-${containerConfig.dockerHubImage}`, { image, });
 
     return taskdef;
+};
+
+export const addService = 
+function(scope: Construct, 
+         id: string, 
+         cluster: Cluster, 
+         taskDef: FargateTaskDefinition, 
+         port: number, 
+         desiredCount: number, 
+         serviceName?: string): FargateService {
+    const sg = new SecurityGroup(scope, `${id}-security-group`, {
+        description: `Security group for service ${serviceName ?? ''}`,
+        vpc: cluster.vpc,
+    });
+    sg.addIngressRule(Peer.anyIpv4(), Port.tcp(port));
+
+    const service = new FargateService(scope, id, {
+        cluster,
+        taskDefinition: taskDef,
+        desiredCount,
+        serviceName,
+        securityGroups: [sg],
+        circuitBreaker: {
+            rollback: true,
+        },
+    });
+
+    return service;
 };
