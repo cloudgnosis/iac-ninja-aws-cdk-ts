@@ -27,4 +27,4 @@ const taskConfig: TaskConfig = { cpu: 512, memoryLimitMB: 1024, family: 'webserv
 const containerConfig: ContainerConfig = { dockerHubImage: 'httpd' };
 
 const taskdef = addTaskDefinitionWithContainer(stack, `taskdef-${taskConfig.family}`, taskConfig, containerConfig);
-addService(stack, `service-${taskConfig.family}`, cluster, taskdef, 80, 0);
+addService(stack, `service-${taskConfig.family}`, cluster, taskdef, 80, 0, true);

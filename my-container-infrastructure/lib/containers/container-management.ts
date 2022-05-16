@@ -4,8 +4,10 @@ import {
     ContainerImage,
     FargateService,
     FargateTaskDefinition,
+    LogDriver,
     TaskDefinition
 } from 'aws-cdk-lib/aws-ecs';
+import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
 export const addCluster = function(scope: Construct, id: string, vpc: IVpc): Cluster {
@@ -26,14 +28,18 @@ export interface ContainerConfig {
 
 export const addTaskDefinitionWithContainer = 
 function(scope: Construct, id: string, taskConfig: TaskConfig, containerConfig: ContainerConfig): TaskDefinition {
-const taskdef = new FargateTaskDefinition(scope, id, {
+    const taskdef = new FargateTaskDefinition(scope, id, {
         cpu: taskConfig.cpu,
         memoryLimitMiB: taskConfig.memoryLimitMB,
         family: taskConfig.family,
     });
 
     const image = ContainerImage.fromRegistry(containerConfig.dockerHubImage);
-    taskdef.addContainer(`container-${containerConfig.dockerHubImage}`, { image, });
+    const logdriver = LogDriver.awsLogs({ 
+        streamPrefix: taskConfig.family,
+        logRetention: RetentionDays.ONE_DAY,
+    });
+    taskdef.addContainer(`container-${containerConfig.dockerHubImage}`, { image, logging: logdriver });
 
     return taskdef;
 };
@@ -45,6 +51,7 @@ function(scope: Construct,
          taskDef: FargateTaskDefinition, 
          port: number, 
          desiredCount: number, 
+         assignPublicIp?: boolean,
          serviceName?: string): FargateService {
     const sg = new SecurityGroup(scope, `${id}-security-group`, {
         description: `Security group for service ${serviceName ?? ''}`,
@@ -61,6 +68,7 @@ function(scope: Construct,
         circuitBreaker: {
             rollback: true,
         },
+        assignPublicIp,
     });
 
     return service;
