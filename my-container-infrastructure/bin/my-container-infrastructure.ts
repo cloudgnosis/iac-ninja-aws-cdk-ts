@@ -5,6 +5,7 @@ import {
   addLoadBalancedService,
   addTaskDefinitionWithContainer, 
   ContainerConfig, 
+  setServiceScaling, 
   TaskConfig 
 } from '../lib/containers/container-management';
 
@@ -38,4 +39,11 @@ const cluster = addCluster(stack, id, vpc);
 const taskConfig: TaskConfig = { cpu: 512, memoryLimitMB: 1024, family: 'webserver' };
 const containerConfig: ContainerConfig = { dockerHubImage: 'httpd', tcpPorts: [80] };
 const taskdef = addTaskDefinitionWithContainer(stack, `taskdef-${taskConfig.family}`, taskConfig, containerConfig);
-addLoadBalancedService(stack, `service-${taskConfig.family}`, cluster, taskdef, 80, 2, true);
+const service = addLoadBalancedService(stack, `service-${taskConfig.family}`, cluster, taskdef, 80, 2, true);
+setServiceScaling(service.service, {
+  minCount: 1,
+  maxCount: 4,
+  scaleCpuTarget: { percent: 50 },
+  scaleMemoryTarget: { percent: 70 },
+});
+

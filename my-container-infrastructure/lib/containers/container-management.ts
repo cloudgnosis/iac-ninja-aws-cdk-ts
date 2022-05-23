@@ -1,5 +1,6 @@
-import { IVpc } from 'aws-cdk-lib/aws-ec2';
-import { Cluster, ContainerImage, FargateTaskDefinition, LogDriver, TaskDefinition, Protocol } from 'aws-cdk-lib/aws-ecs';
+import { CfnOutput } from 'aws-cdk-lib';
+import { IVpc, Peer, Port, SecurityGroup } from 'aws-cdk-lib/aws-ec2';
+import { Cluster, ContainerImage, FargateService, FargateTaskDefinition, LogDriver, IService, TaskDefinition, Protocol } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
@@ -51,12 +52,18 @@ function(scope: Construct,
          desiredCount: number, 
          publicEndpoint?: boolean,
          serviceName?: string): ApplicationLoadBalancedFargateService {
+    // const sg = new SecurityGroup(scope, `${id}-security-group`, {
+    //     description: `Security group for service ${serviceName ?? ''}`,
+    //     vpc: cluster.vpc,
+    // });
+    // sg.addIngressRule(Peer.anyIpv4(), Port.tcp(port));
 
     const service = new ApplicationLoadBalancedFargateService(scope, id, {
         cluster,
         taskDefinition: taskDef,
         desiredCount,
         serviceName,
+        //securityGroups: [sg],
         circuitBreaker: {
             rollback: true,
         },
@@ -67,3 +74,31 @@ function(scope: Construct,
     return service;
 };
 
+
+export interface ScalingThreshold {
+    percent: number;
+}
+export interface ServiceScalingConfig {
+    minCount: number;
+    maxCount: number;
+    scaleCpuTarget: ScalingThreshold;
+    scaleMemoryTarget: ScalingThreshold;
+
+}
+
+
+export const setServiceScaling = function(service: FargateService, config: ServiceScalingConfig) {
+    const scaling = service.autoScaleTaskCount({
+        maxCapacity: config.maxCount,
+        minCapacity: config.minCount,
+    });
+
+    scaling.scaleOnCpuUtilization('CpuScaling', {
+        targetUtilizationPercent: config.scaleCpuTarget.percent,
+    });
+
+    scaling.scaleOnMemoryUtilization('MemoryScaling', {
+        targetUtilizationPercent: config.scaleMemoryTarget.percent,
+    });
+
+}
