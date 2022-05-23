@@ -1,12 +1,6 @@
-import { IVpc, Peer, Port, SecurityGroup } from 'aws-cdk-lib/aws-ec2';
-import {
-    Cluster,
-    ContainerImage,
-    FargateService,
-    FargateTaskDefinition,
-    LogDriver,
-    TaskDefinition
-} from 'aws-cdk-lib/aws-ecs';
+import { IVpc } from 'aws-cdk-lib/aws-ec2';
+import { Cluster, ContainerImage, FargateTaskDefinition, LogDriver, TaskDefinition, Protocol } from 'aws-cdk-lib/aws-ecs';
+import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
@@ -24,6 +18,7 @@ export interface TaskConfig {
 
 export interface ContainerConfig {
     readonly dockerHubImage: string;
+    readonly tcpPorts: number[];
 }
 
 export const addTaskDefinitionWithContainer = 
@@ -39,37 +34,36 @@ function(scope: Construct, id: string, taskConfig: TaskConfig, containerConfig: 
         streamPrefix: taskConfig.family,
         logRetention: RetentionDays.ONE_DAY,
     });
-    taskdef.addContainer(`container-${containerConfig.dockerHubImage}`, { image, logging: logdriver });
+    const containerDef = taskdef.addContainer(`container-${containerConfig.dockerHubImage}`, { image, logging: logdriver });
+    for (const port of containerConfig.tcpPorts) {
+        containerDef.addPortMappings({ containerPort: port, protocol: Protocol.TCP });
+    }
 
     return taskdef;
 };
 
-export const addService = 
+export const addLoadBalancedService = 
 function(scope: Construct, 
          id: string, 
          cluster: Cluster, 
          taskDef: FargateTaskDefinition, 
          port: number, 
          desiredCount: number, 
-         assignPublicIp?: boolean,
-         serviceName?: string): FargateService {
-    const sg = new SecurityGroup(scope, `${id}-security-group`, {
-        description: `Security group for service ${serviceName ?? ''}`,
-        vpc: cluster.vpc,
-    });
-    sg.addIngressRule(Peer.anyIpv4(), Port.tcp(port));
+         publicEndpoint?: boolean,
+         serviceName?: string): ApplicationLoadBalancedFargateService {
 
-    const service = new FargateService(scope, id, {
+    const service = new ApplicationLoadBalancedFargateService(scope, id, {
         cluster,
         taskDefinition: taskDef,
         desiredCount,
         serviceName,
-        securityGroups: [sg],
         circuitBreaker: {
             rollback: true,
         },
-        assignPublicIp,
+        publicLoadBalancer: publicEndpoint,
+        listenerPort: port,
     });
 
     return service;
 };
+

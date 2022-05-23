@@ -3,7 +3,7 @@ import { Vpc } from 'aws-cdk-lib/aws-ec2';
 import { Capture, Match, Template } from 'aws-cdk-lib/assertions';
 import {
     addCluster,
-    addService,
+    addLoadBalancedService,
     addTaskDefinitionWithContainer,
     ContainerConfig,
     TaskConfig
@@ -35,7 +35,7 @@ test('ECS Fargate task definition defined', () => {
     const familyval = 'test';
     const taskCfg: TaskConfig = { cpu: cpuval, memoryLimitMB: memval, family: familyval };
     const imageName = 'httpd';
-    const containerCfg: ContainerConfig = { dockerHubImage: imageName };
+    const containerCfg: ContainerConfig = { dockerHubImage: imageName, tcpPorts: [80] };
 
     // Test code
     const taskdef = addTaskDefinitionWithContainer(stack, 'test-taskdef', taskCfg, containerCfg);
@@ -56,7 +56,7 @@ test('ECS Fargate task definition defined', () => {
 
 });
 
-test('Container definition added to task definition', () => {
+test('Container definition added to task definitio', () => {
     // Test setup
     const stack = new Stack();
     const cpuval = 512;
@@ -64,7 +64,7 @@ test('Container definition added to task definition', () => {
     const familyval = 'test';
     const taskCfg: TaskConfig = { cpu: cpuval, memoryLimitMB: memval, family: familyval };
     const imageName = 'httpd';
-    const containerCfg: ContainerConfig = { dockerHubImage: imageName };
+    const containerCfg: ContainerConfig = { dockerHubImage: imageName, tcpPorts: [80] };
 
     // Test code
     const taskdef = addTaskDefinitionWithContainer(stack, 'test-taskdef', taskCfg, containerCfg);
@@ -100,7 +100,7 @@ describe('Test service creation options', () => {
         const familyval = 'test';
         const taskCfg: TaskConfig = { cpu: cpuval, memoryLimitMB: memval, family: familyval };
         const imageName = 'httpd';
-        const containerCfg: ContainerConfig = { dockerHubImage: imageName };
+        const containerCfg: ContainerConfig = { dockerHubImage: imageName, tcpPorts: [80] };
         taskdef = addTaskDefinitionWithContainer(stack, 'test-taskdef', taskCfg, containerCfg);
     });
 
@@ -109,7 +109,7 @@ describe('Test service creation options', () => {
         const desiredCount = 1;
     
         // Test code
-        const service = addService(stack, 'test-service', cluster, taskdef, port, desiredCount);
+        const service = addLoadBalancedService(stack, 'test-service', cluster, taskdef, port, desiredCount);
     
         // Check result
         const sgCapture = new Capture();
@@ -130,7 +130,13 @@ describe('Test service creation options', () => {
             }),
         });
 
-        template.resourceCountIs('AWS::EC2::SecurityGroup', 1);
+        template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 1);
+        template.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', {
+            Type: 'application',
+            Scheme: 'internet-facing',
+        });
+    
+        //template.resourceCountIs('AWS::EC2::SecurityGroup', 1);
         template.hasResourceProperties('AWS::EC2::SecurityGroup', {
             SecurityGroupIngress: Match.arrayWith([
                 Match.objectLike({
@@ -139,6 +145,23 @@ describe('Test service creation options', () => {
                     IpProtocol: 'tcp',
                 }),
             ]),
+        });
+    }); 
+
+    test('Fargate load-balanced service created, without public access', () => {    
+        const port = 80;
+        const desiredCount = 1;
+    
+        // Test code
+        const service = addLoadBalancedService(stack, 'test-service', cluster, taskdef, port, desiredCount, false);
+    
+        // Check result
+        const template = Template.fromStack(stack);
+
+        template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 1);
+        template.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', {
+            Type: 'application',
+            Scheme: 'internal',
         });
     }); 
 });
