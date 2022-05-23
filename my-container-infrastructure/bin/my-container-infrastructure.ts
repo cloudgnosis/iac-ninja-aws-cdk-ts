@@ -1,5 +1,5 @@
 import { App, Stack } from 'aws-cdk-lib';
-import { Vpc } from 'aws-cdk-lib/aws-ec2';
+import { IVpc, Vpc } from 'aws-cdk-lib/aws-ec2';
 import {
     addCluster,
     addService,
@@ -16,9 +16,20 @@ const stack = new Stack(app, 'my-container-infrastructure', {
     },
 });
 
-const vpc = Vpc.fromLookup(stack, 'vpc', {
-    isDefault: true,
-});
+let vpc: IVpc;
+
+let vpcName = app.node.tryGetContext('vpcname');
+if (vpcName) {
+  vpc = Vpc.fromLookup(stack, 'vpc', {
+    vpcName,
+  });
+} else {
+  vpc = new Vpc(stack, 'vpc', {
+    vpcName: 'my-vpc',
+    natGateways: 1,
+    maxAzs: 2,
+  });
+}
 
 const id = 'my-test-cluster';
 const cluster = addCluster(stack, id, vpc);
