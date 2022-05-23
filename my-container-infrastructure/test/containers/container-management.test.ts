@@ -8,6 +8,7 @@ import {
     ContainerConfig,
     TaskConfig
 } from '../../lib/containers/container-management';
+import { Cluster, TaskDefinition } from 'aws-cdk-lib/aws-ecs';
 
 test('ECS cluster is defined with existing vpc', () => {
     // Test setup
@@ -24,6 +25,7 @@ test('ECS cluster is defined with existing vpc', () => {
 
     expect(cluster.vpc).toEqual(vpc);
 });
+
 
 test('ECS Fargate task definition defined', () => {
     // Test setup
@@ -54,57 +56,6 @@ test('ECS Fargate task definition defined', () => {
 
 });
 
-test('Fargate service created, with provided mandatory properties only', () => {
-    // Test setup
-    const stack = new Stack();
-    const vpc = new Vpc(stack, 'vpc');
-    const cluster = addCluster(stack, 'test-cluster', vpc);
-
-    const cpuval = 512;
-    const memval = 1024;
-    const familyval = 'test';
-    const taskCfg: TaskConfig = { cpu: cpuval, memoryLimitMB: memval, family: familyval };
-    const imageName = 'httpd';
-    const containerCfg: ContainerConfig = { dockerHubImage: imageName };
-    const taskdef = addTaskDefinitionWithContainer(stack, 'test-taskdef', taskCfg, containerCfg);
-
-    const port = 80;
-    const desiredCount = 1;
-
-    // Test code
-    const service = addService(stack, 'test-service', cluster, taskdef, port, desiredCount);
-
-    // Check result
-    const sgCapture = new Capture();
-    const template = Template.fromStack(stack);
-
-    expect(service.cluster).toEqual(cluster);
-    expect(service.taskDefinition).toEqual(taskdef);
-
-    template.resourceCountIs('AWS::ECS::Service', 1);
-    template.hasResourceProperties('AWS::ECS::Service', {
-        DesiredCount: desiredCount,
-        LaunchType: 'FARGATE',
-        NetworkConfiguration: Match.objectLike({
-            AwsvpcConfiguration: Match.objectLike({
-                AssignPublicIp: 'DISABLED',
-                SecurityGroups: Match.arrayWith([sgCapture]),
-            }),
-        }),
-    });
-
-    template.resourceCountIs('AWS::EC2::SecurityGroup', 1);
-    template.hasResourceProperties('AWS::EC2::SecurityGroup', {
-        SecurityGroupIngress: Match.arrayWith([
-            Match.objectLike({
-                CidrIp: '0.0.0.0/0',
-                FromPort: port,
-                IpProtocol: 'tcp',
-            }),
-        ]),
-    });
-});
-
 test('Container definition added to task definition', () => {
     // Test setup
     const stack = new Stack();
@@ -132,3 +83,63 @@ test('Container definition added to task definition', () => {
         ]),
     });
 });
+
+describe('Test service creation options', () => {
+    let stack: Stack;
+    let cluster: Cluster;
+    let taskdef: TaskDefinition;
+
+    beforeEach(() => {
+        // Test setup
+        stack = new Stack();
+        const vpc = new Vpc(stack, 'vpc');
+        cluster = addCluster(stack, 'test-cluster', vpc);
+    
+        const cpuval = 512;
+        const memval = 1024;
+        const familyval = 'test';
+        const taskCfg: TaskConfig = { cpu: cpuval, memoryLimitMB: memval, family: familyval };
+        const imageName = 'httpd';
+        const containerCfg: ContainerConfig = { dockerHubImage: imageName };
+        taskdef = addTaskDefinitionWithContainer(stack, 'test-taskdef', taskCfg, containerCfg);
+    });
+
+    test('Fargate load-balanced service created, with provided mandatory properties only', () => {    
+        const port = 80;
+        const desiredCount = 1;
+    
+        // Test code
+        const service = addService(stack, 'test-service', cluster, taskdef, port, desiredCount);
+    
+        // Check result
+        const sgCapture = new Capture();
+        const template = Template.fromStack(stack);
+    
+        expect(service.cluster).toEqual(cluster);
+        expect(service.taskDefinition).toEqual(taskdef);
+    
+        template.resourceCountIs('AWS::ECS::Service', 1);
+        template.hasResourceProperties('AWS::ECS::Service', {
+            DesiredCount: desiredCount,
+            LaunchType: 'FARGATE',
+            NetworkConfiguration: Match.objectLike({
+                AwsvpcConfiguration: Match.objectLike({
+                    AssignPublicIp: 'DISABLED',
+                    SecurityGroups: Match.arrayWith([sgCapture]),
+                }),
+            }),
+        });
+
+        template.resourceCountIs('AWS::EC2::SecurityGroup', 1);
+        template.hasResourceProperties('AWS::EC2::SecurityGroup', {
+            SecurityGroupIngress: Match.arrayWith([
+                Match.objectLike({
+                    CidrIp: '0.0.0.0/0',
+                    FromPort: port,
+                    IpProtocol: 'tcp',
+                }),
+            ]),
+        });
+    }); 
+});
+
