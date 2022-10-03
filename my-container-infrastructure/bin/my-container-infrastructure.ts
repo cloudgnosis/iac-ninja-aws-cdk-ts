@@ -8,6 +8,7 @@ import {
   setServiceScaling, 
   TaskConfig 
 } from '../lib/containers/container-management';
+import { initMonitoring } from '../lib/monitoring';
 
 const app = new App();
 const stack = new Stack(app, 'my-container-infrastructure', {
@@ -32,7 +33,6 @@ if (vpcName) {
   });
 }
 
-
 const id = 'my-test-cluster';
 const cluster = addCluster(stack, id, vpc);
 
@@ -47,3 +47,8 @@ setServiceScaling(service.service, {
   scaleMemoryTarget: { percent: 70 },
 });
 
+const monitoring = initMonitoring(stack, {
+  dashboardName: 'monitoring',
+});
+
+monitoring.handler.addMediumHeader('Test App monitoring');
