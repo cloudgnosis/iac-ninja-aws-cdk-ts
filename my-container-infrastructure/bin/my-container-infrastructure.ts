@@ -1,14 +1,20 @@
-import { App, Stack } from 'aws-cdk-lib';
+import { App, Duration, Stack } from 'aws-cdk-lib';
+import { ComparisonOperator } from 'aws-cdk-lib/aws-cloudwatch';
+import { OpsItemCategory, OpsItemSeverity } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { IVpc, Vpc } from 'aws-cdk-lib/aws-ec2';
+import { Topic } from 'aws-cdk-lib/aws-sns';
+import { EmailSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
+import { IAlarmActionStrategy, MultipleAlarmActionStrategy, OpsItemAlarmActionStrategy, SnsAlarmActionStrategy } from 'cdk-monitoring-constructs';
 import { 
   addCluster, 
   addLoadBalancedService,
   addTaskDefinitionWithContainer, 
+  ClusterConfig,
   ContainerConfig, 
   setServiceScaling, 
   TaskConfig 
 } from '../lib/containers/container-management';
-import { initMonitoring } from '../lib/monitoring';
+import { initMonitoring, MonitoringConfig } from '../lib/monitoring';
 
 const app = new App();
 const stack = new Stack(app, 'my-container-infrastructure', {
@@ -33,8 +39,10 @@ if (vpcName) {
   });
 }
 
+
 const id = 'my-test-cluster';
-const cluster = addCluster(stack, id, vpc);
+const clusterConfig: ClusterConfig = { vpc, enableContainerInsights: true };
+const cluster = addCluster(stack, id, clusterConfig);
 
 const taskConfig: TaskConfig = { cpu: 512, memoryLimitMB: 1024, family: 'webserver' };
 const containerConfig: ContainerConfig = { dockerHubImage: 'httpd', tcpPorts: [80] };
@@ -47,8 +55,40 @@ setServiceScaling(service.service, {
   scaleMemoryTarget: { percent: 70 },
 });
 
+const alarmTopic = new Topic(stack, 'alarm-topic', {
+  displayName: 'Alarm topic',
+});
 const monitoring = initMonitoring(stack, {
   dashboardName: 'monitoring',
+  defaultAlarmTopic: alarmTopic,
 });
 
+const alarmActions: IAlarmActionStrategy[] = [
+  new OpsItemAlarmActionStrategy(OpsItemSeverity.MEDIUM, OpsItemCategory.PERFORMANCE),
+];
+if (monitoring.defaultAlarmTopic) {
+  alarmActions.push(new SnsAlarmActionStrategy({
+    onAlarmTopic: monitoring.defaultAlarmTopic,
+    onOkTopic: monitoring.defaultAlarmTopic,
+  }));
+}
+
 monitoring.handler.addMediumHeader('Test App monitoring');
+monitoring.handler.monitorFargateService({
+  fargateService: service,
+  humanReadableName: 'My test service',
+
+  addRunningTaskCountAlarm: {
+    alarm1: {
+      maxRunningTasks: 2,
+      comparisonOperatorOverride: ComparisonOperator.LESS_THAN_THRESHOLD,
+      evaluationPeriods: 2,
+      datapointsToAlarm: 2,
+      period: Duration.minutes(5),
+      actionOverride: new MultipleAlarmActionStrategy(alarmActions),
+    }
+  }
+});
+
+const alarmEmail = 'hello@example.com';
+alarmTopic.addSubscription(new EmailSubscription(alarmEmail));

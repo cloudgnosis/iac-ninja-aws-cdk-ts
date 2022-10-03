@@ -5,9 +5,15 @@ import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patte
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
-export const addCluster = function(scope: Construct, id: string, vpc: IVpc): Cluster {
+export interface ClusterConfig {
+    readonly vpc: IVpc;
+    readonly enableContainerInsights?: true;
+}
+
+export const addCluster = function(scope: Construct, id: string, config: ClusterConfig): Cluster {
     return new Cluster(scope, id, {
-        vpc,
+        vpc: config.vpc,
+        containerInsights: config.enableContainerInsights ?? false,
     });
 }
 

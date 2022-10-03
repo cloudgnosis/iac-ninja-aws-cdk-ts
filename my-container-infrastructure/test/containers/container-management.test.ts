@@ -5,6 +5,7 @@ import {
     addCluster,
     addLoadBalancedService,
     addTaskDefinitionWithContainer,
+    ClusterConfig,
     ContainerConfig,
     setServiceScaling,
     TaskConfig
@@ -17,7 +18,7 @@ test('ECS cluster is defined with existing vpc', () => {
     const vpc = new Vpc(stack, 'vpc');
 
     // Test code
-    const cluster = addCluster(stack, 'test-cluster', vpc);
+    const cluster = addCluster(stack, 'test-cluster', {vpc});
 
     // Check result
     const template = Template.fromStack(stack);
@@ -25,6 +26,30 @@ test('ECS cluster is defined with existing vpc', () => {
     template.resourceCountIs('AWS::ECS::Cluster', 1);
 
     expect(cluster.vpc).toEqual(vpc);
+});
+
+test('Check that container insights will be enabled when that option is set', () => {
+    // Test setup
+    const stack = new Stack();
+    const vpc = new Vpc(stack, 'vpc');
+    const config: ClusterConfig = {
+        vpc,
+        enableContainerInsights: true
+    };
+
+    // Test code
+    const cluster = addCluster(stack, 'test-cluster', config);
+
+    // Check result
+    const template = Template.fromStack(stack);
+    template.hasResourceProperties('AWS::ECS::Cluster', {
+        ClusterSettings: Match.arrayWith([
+            Match.objectEquals({
+                Name: 'containerInsights',
+                Value: 'enabled',
+            }),
+        ]),
+    });
 });
 
 
@@ -94,7 +119,7 @@ describe('Test service creation options', () => {
         // Test setup
         stack = new Stack();
         const vpc = new Vpc(stack, 'vpc');
-        cluster = addCluster(stack, 'test-cluster', vpc);
+        cluster = addCluster(stack, 'test-cluster', {vpc});
     
         const cpuval = 512;
         const memval = 1024;
