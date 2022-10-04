@@ -7,7 +7,7 @@ import { Construct } from 'constructs';
 
 export interface ClusterConfig {
     readonly vpc: IVpc;
-    readonly enableContainerInsights?: true;
+    readonly enableContainerInsights?: boolean;
 }
 
 export const addCluster = function(scope: Construct, id: string, config: ClusterConfig): Cluster {
